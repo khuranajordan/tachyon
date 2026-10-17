@@ -105,7 +105,7 @@ impl Repository {
                     .map_err(|e| format!("Failed to read ref {:?}: {}", ref_path, e))?;
                 Some(Oid::from_hex(ref_content.trim())?)
             } else {
-                None
+                self.read_packed_ref(&format!("refs/heads/{}", branch_ref))
             };
             Ok(HeadState::Branch {
                 name: branch_ref.to_string(),
@@ -115,6 +115,29 @@ impl Repository {
             let oid = Oid::from_hex(trimmed)?;
             Ok(HeadState::Detached(oid))
         }
+    }
+
+    pub fn read_packed_ref(&self, target_ref: &str) -> Option<Oid> {
+        let packed_path = self.git_dir.join("packed-refs");
+        if !packed_path.exists() {
+            return None;
+        }
+
+        if let Ok(content) = fs::read_to_string(packed_path) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with('#') || trimmed.starts_with('^') || trimmed.is_empty() {
+                    continue;
+                }
+                let mut parts = trimmed.split_whitespace();
+                if let (Some(hash_str), Some(ref_name)) = (parts.next(), parts.next()) {
+                    if ref_name == target_ref {
+                        return Oid::from_hex(hash_str).ok();
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn current_branch_name(&self) -> String {
@@ -148,12 +171,36 @@ impl Repository {
 
     pub fn read_branch(&self, branch_name: &str) -> Result<Oid, String> {
         let ref_path = self.git_dir.join("refs/heads").join(branch_name);
-        if !ref_path.exists() {
-            return Err(format!("Branch '{}' does not exist", branch_name));
+        if ref_path.exists() {
+            let content = fs::read_to_string(&ref_path)
+                .map_err(|e| format!("Failed to read branch {}: {}", branch_name, e))?;
+            return Oid::from_hex(content.trim());
         }
-        let content = fs::read_to_string(&ref_path)
-            .map_err(|e| format!("Failed to read branch {}: {}", branch_name, e))?;
-        Oid::from_hex(content.trim())
+
+        // Check packed-refs for refs/heads/<branch>
+        if let Some(oid) = self.read_packed_ref(&format!("refs/heads/{}", branch_name)) {
+            return Ok(oid);
+        }
+
+        // Check packed-refs or loose refs for remote tracking branch (e.g. origin/<branch>)
+        let remote_ref = format!("refs/remotes/origin/{}", branch_name);
+        if let Some(oid) = self.read_packed_ref(&remote_ref) {
+            // Auto-create local branch tracking remote branch
+            let _ = self.write_branch(branch_name, &oid);
+            return Ok(oid);
+        }
+
+        let loose_remote_path = self.git_dir.join("refs/remotes/origin").join(branch_name);
+        if loose_remote_path.exists() {
+            if let Ok(content) = fs::read_to_string(&loose_remote_path) {
+                if let Ok(oid) = Oid::from_hex(content.trim()) {
+                    let _ = self.write_branch(branch_name, &oid);
+                    return Ok(oid);
+                }
+            }
+        }
+
+        Err(format!("Branch '{}' does not exist", branch_name))
     }
 
     pub fn write_branch(&self, branch_name: &str, oid: &Oid) -> Result<(), String> {
@@ -167,7 +214,7 @@ impl Repository {
 
     pub fn list_branches(&self) -> Result<Vec<(String, Oid, bool)>, String> {
         let heads_dir = self.git_dir.join("refs/heads");
-        let mut branches = Vec::new();
+        let mut branches_map: std::collections::BTreeMap<String, (Oid, bool)> = std::collections::BTreeMap::new();
         let current_branch = self.current_branch_name();
 
         if heads_dir.exists() {
@@ -179,12 +226,41 @@ impl Repository {
                     if let Ok(content) = fs::read_to_string(entry.path()) {
                         if let Ok(oid) = Oid::from_hex(content.trim()) {
                             let is_current = name == current_branch;
-                            branches.push((name, oid, is_current));
+                            branches_map.insert(name, (oid, is_current));
                         }
                     }
                 }
             }
         }
+
+        // Also add packed refs for refs/heads/*
+        let packed_path = self.git_dir.join("packed-refs");
+        if packed_path.exists() {
+            if let Ok(content) = fs::read_to_string(packed_path) {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with('#') || trimmed.starts_with('^') || trimmed.is_empty() {
+                        continue;
+                    }
+                    let mut parts = trimmed.split_whitespace();
+                    if let (Some(hash_str), Some(ref_name)) = (parts.next(), parts.next()) {
+                        if let Some(name) = ref_name.strip_prefix("refs/heads/") {
+                            if !branches_map.contains_key(name) {
+                                if let Ok(oid) = Oid::from_hex(hash_str) {
+                                    let is_current = name == current_branch;
+                                    branches_map.insert(name.to_string(), (oid, is_current));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut branches: Vec<(String, Oid, bool)> = branches_map
+            .into_iter()
+            .map(|(name, (oid, is_current))| (name, oid, is_current))
+            .collect();
 
         branches.sort_by(|a, b| a.0.cmp(&b.0));
         Ok(branches)
@@ -268,6 +344,20 @@ impl Repository {
                 return Ok(matches[0]);
             } else if matches.len() > 1 {
                 return Err(format!("Short hash '{}' is ambiguous (matches {} objects)", prefix, matches.len()));
+            }
+        }
+
+        // Try git rev-parse if object is packed
+        if let Ok(output) = std::process::Command::new("git")
+            .current_dir(&self.work_dir)
+            .args(&["rev-parse", "--verify", prefix])
+            .output()
+        {
+            if output.status.success() {
+                let hex = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if let Ok(oid) = Oid::from_hex(&hex) {
+                    return Ok(oid);
+                }
             }
         }
 

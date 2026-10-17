@@ -79,12 +79,14 @@ impl GitObject {
 }
 
 pub struct ObjectStore {
+    git_dir: PathBuf,
     objects_dir: PathBuf,
 }
 
 impl ObjectStore {
     pub fn new(git_dir: &Path) -> Self {
         Self {
+            git_dir: git_dir.to_path_buf(),
             objects_dir: git_dir.join("objects"),
         }
     }
@@ -96,13 +98,18 @@ impl ObjectStore {
     }
 
     pub fn exists(&self, oid: &Oid) -> bool {
-        self.object_path(oid).exists()
+        if self.object_path(oid).exists() {
+            return true;
+        }
+        let pack_mgr = super::pack::PackManager::new(&self.git_dir);
+        pack_mgr.read_object(oid).is_ok()
     }
 
     pub fn read(&self, oid: &Oid) -> Result<GitObject, String> {
         let path = self.object_path(oid);
         if !path.exists() {
-            return Err(format!("Object {} not found at {:?}", oid, path));
+            let pack_mgr = super::pack::PackManager::new(&self.git_dir);
+            return pack_mgr.read_object(oid);
         }
 
         let file = File::open(&path).map_err(|e| format!("Failed to open {:?}: {}", path, e))?;

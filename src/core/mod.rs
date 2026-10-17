@@ -11,3 +11,4 @@ pub mod checkout;
 pub mod stash;
 pub mod merge;
 pub mod blame;
+pub mod pack;
