@@ -189,6 +189,33 @@ enum Commands {
         commit: String,
     },
 
+    /// Synchronize local repository with remote changes [alias: pull]
+    #[command(alias = "pull")]
+    Sync {
+        /// Remote repository name (default: origin)
+        remote: Option<String>,
+        /// Branch name
+        branch: Option<String>,
+        /// Rebase local commits on top of remote branch
+        #[arg(short, long)]
+        rebase: bool,
+    },
+
+    /// Publish local commits to remote repository [alias: push]
+    #[command(alias = "push")]
+    Publish {
+        /// Remote repository name (default: origin)
+        remote: Option<String>,
+        /// Branch name
+        branch: Option<String>,
+        /// Set upstream tracking reference
+        #[arg(short = 'u', long)]
+        set_upstream: bool,
+        /// Force push with lease
+        #[arg(short, long)]
+        force: bool,
+    },
+
     /// Benchmark Tachyon speed against standard Git [alias: benchmark]
     #[command(alias = "benchmark")]
     Bench,
@@ -248,6 +275,8 @@ fn main() {
         Commands::Authors { file } => commands::authors::execute(file),
         Commands::Milestone { name, commit } => commands::milestone::execute(name, commit),
         Commands::Pluck { commit } => commands::pluck::execute(commit),
+        Commands::Sync { remote, branch, rebase } => commands::sync::execute(remote, branch, rebase),
+        Commands::Publish { remote, branch, set_upstream, force } => commands::publish::execute(remote, branch, set_upstream, force),
         Commands::Bench => commands::bench::execute(),
     };
 

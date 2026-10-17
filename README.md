@@ -56,6 +56,8 @@ Tachyon replaces Git's historical terminology with intuitive verbs, while keepin
 | `tachyon authors` / `blame` | `git blame` | Line-by-line authorship attribution |
 | `tachyon milestone` / `tag` | `git tag` | Lightweight and annotated tags |
 | `tachyon pluck` / `cherry-pick` | `git cherry-pick` | Pluck a commit from another branch |
+| `tachyon sync` / `pull` | `git pull` | Synchronize and integrate remote changes (`--rebase` supported) |
+| `tachyon publish` / `push` | `git push` | Publish local commits to remote (`-u`, `--force` supported) |
 | `tachyon bench` | N/A | Run side-by-side benchmark against installed `git` |
 
 ---
