@@ -120,11 +120,36 @@ impl CheckoutEngine {
         // Save new index
         repo.write_index(&new_index)?;
 
+        let old_branch = repo.current_branch_name();
+        let _ = fs::write(repo.git_dir.join("PREV_BRANCH"), format!("{}\n", old_branch));
+
         // Update HEAD
         if let Some(branch) = branch_name {
             repo.set_head_branch(branch)?;
         } else {
             repo.set_head_detached(commit_oid)?;
+        }
+
+        // Reflog entry for HEAD
+        let short_oid = commit_oid.short();
+        let new_target_name = branch_name.unwrap_or(&short_oid);
+        let (author_name, author_email) = repo.author_identity();
+        let now = chrono::Local::now();
+        let timestamp = now.timestamp();
+        let offset = now.offset().local_minus_utc();
+        let offset_sign = if offset >= 0 { '+' } else { '-' };
+        let offset_mins = (offset.abs() / 60) % 60;
+        let offset_hours = offset.abs() / 3600;
+        let committer = format!("{} <{}> {} {}{:02}{:02}", author_name, author_email, timestamp, offset_sign, offset_hours, offset_mins);
+        let old_oid = head_commit.unwrap_or(Oid::ZERO);
+        let log_line = format!("{} {} {}\tcheckout: moving from {} to {}\n", old_oid.to_hex(), commit_oid.to_hex(), committer, old_branch, new_target_name);
+        let head_log = repo.git_dir.join("logs").join("HEAD");
+        if let Some(parent) = head_log.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&head_log) {
+            use std::io::Write;
+            let _ = f.write_all(log_line.as_bytes());
         }
 
         Ok(())
