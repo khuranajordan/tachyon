@@ -216,6 +216,19 @@ enum Commands {
         force: bool,
     },
 
+    /// Download objects and refs from remote repository [alias: fetch, retrieve]
+    #[command(alias = "fetch", alias = "retrieve")]
+    Download {
+        /// Remote repository name (default: origin)
+        remote: Option<String>,
+        /// Fetch from all remotes
+        #[arg(short, long)]
+        all: bool,
+        /// Remove remote-tracking references that no longer exist on remote
+        #[arg(short, long)]
+        prune: bool,
+    },
+
     /// Benchmark Tachyon speed against standard Git [alias: benchmark]
     #[command(alias = "benchmark")]
     Bench,
@@ -277,6 +290,7 @@ fn main() {
         Commands::Pluck { commit } => commands::pluck::execute(commit),
         Commands::Sync { remote, branch, rebase } => commands::sync::execute(remote, branch, rebase),
         Commands::Publish { remote, branch, set_upstream, force } => commands::publish::execute(remote, branch, set_upstream, force),
+        Commands::Download { remote, all, prune } => commands::fetch::execute(remote, all, prune),
         Commands::Bench => commands::bench::execute(),
     };
 

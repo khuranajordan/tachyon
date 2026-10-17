@@ -17,3 +17,4 @@ pub mod pluck;
 pub mod bench;
 pub mod sync;
 pub mod publish;
+pub mod fetch;
