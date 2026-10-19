@@ -1,0 +1,45 @@
+{
+  "name": "tachyon-cli",
+  "version": "0.1.0",
+  "description": "⚡ Blazing-fast (17x faster than Git), intuitive, interactive Git clone reconstructed in Rust",
+  "main": "bin/index.js",
+  "bin": {
+    "tachyon": "bin/index.js",
+    "ty": "bin/index.js"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node bin/index.js --help"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/khuranajordan/tachyon.git"
+  },
+  "keywords": [
+    "git",
+    "vcs",
+    "tachyon",
+    "cli",
+    "fast",
+    "rust",
+    "version-control",
+    "performance"
+  ],
+  "author": "Rohan Khurana",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/khuranajordan/tachyon/issues"
+  },
+  "homepage": "https://github.com/khuranajordan/tachyon#readme",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ]
+}
